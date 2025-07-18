@@ -4,6 +4,14 @@ use strict;
 use warnings;
 use DBI;
 use Time::HiRes qw(time);
+use Class::Tiny qw(
+    conn
+    maxsize
+    table
+    pop_func
+    sqlite_cache_size_bytes
+    queue_name
+);
 use constant {
     MESSAGE_STATUS_READY => 0,
     MESSAGE_STATUS_LOCKED => 1,
@@ -58,20 +66,20 @@ sub _validate_table_name {
     return $name;
 }
 
-sub new {
-    my ($class, %args) = @_;
+sub BUILD {
+    my ($self, $args) = @_;
 
-    my $filename_or_conn = $args{filename_or_conn};
-    my $memory = $args{memory};
-    my $maxsize = $args{maxsize};
-    my $queue_name = $args{queue_name} || 'Queue';
-    my $sqlite_cache_size_bytes = $args{sqlite_cache_size_bytes} || 256_000;
+    my $filename_or_conn = $args->{filename_or_conn};
+    my $memory = $args->{memory};
+    $self->{maxsize} = $args->{maxsize};
+    $self->{queue_name} = $args->{queue_name} || 'Queue';
+    $self->{sqlite_cache_size_bytes} = $args->{sqlite_cache_size_bytes} || 256_000;
 
     die "Either specify a filename_or_conn or pass memory=True"
         unless (defined $filename_or_conn && !$memory) || (!defined $filename_or_conn && $memory);
 
-    die "sqlite_cache_size_bytes must be > 0" unless $sqlite_cache_size_bytes > 0;
-    my $cache_n = -1 * int($sqlite_cache_size_bytes / 1024);
+    die "sqlite_cache_size_bytes must be > 0" unless $self->{sqlite_cache_size_bytes} > 0;
+    my $cache_n = -1 * int($self->{sqlite_cache_size_bytes} / 1024);
 
     my $dbh;
     if ($memory || (defined $filename_or_conn && $filename_or_conn eq ':memory:')) {
@@ -83,12 +91,8 @@ sub new {
         $dbh = DBI->connect("dbi:SQLite:dbname=$filename_or_conn", "", "", { RaiseError => 1, AutoCommit => 1 });
     }
 
-    my $self = {
-        conn => $dbh,
-        maxsize => defined $maxsize ? int($maxsize) : undef,
-        table => '[' . _validate_table_name($queue_name) . ']',
-    };
-    bless $self, $class;
+    $self->{conn} = $dbh;
+    $self->{table} = '[' . _validate_table_name($self->{queue_name}) . ']';
 
     $self->{pop_func} = $self->_select_pop_func();
 
@@ -120,7 +124,7 @@ SQL
     $self->{conn}->do("PRAGMA cache_size = $cache_n;");
 
     if (defined $self->{maxsize}) {
-        my $validated_name = _validate_table_name($queue_name);
+        my $validated_name = _validate_table_name($self->{queue_name});
         $self->{conn}->do(<<"SQL");
 CREATE TRIGGER IF NOT EXISTS maxsize_control_${validated_name}
    BEFORE INSERT
@@ -131,8 +135,6 @@ BEGIN
 END;
 SQL
     }
-
-    return $self;
 }
 
 sub get_sqlite_version {
@@ -160,14 +162,14 @@ sub put {
 SQL
     $sth->execute($data, $message_id, $now);
 
-    return bless {
+    return Politequeue::Message->new(
         data => $data,
         message_id => $message_id,
         status => MESSAGE_STATUS_READY,
         in_time => $now,
         lock_time => undef,
         done_time => undef,
-    }, 'Politequeue::Message';
+    );
 }
 
 sub pop {
@@ -199,7 +201,10 @@ SQL
         $self->{conn}->rollback;
         die $@;
     }
-    return $message ? bless($message, 'Politequeue::Message') : undef;
+    if ($message) {
+        return Politequeue::Message->new(%$message);
+    }
+    return undef;
 }
 
 sub _pop_transaction {
@@ -236,7 +241,10 @@ SQL
         $self->{conn}->rollback;
         die $@;
     }
-    return $message ? bless($message, 'Politequeue::Message') : undef;
+    if ($message) {
+        return Politequeue::Message->new(%$message);
+    }
+    return undef;
 }
 
 sub peek {
@@ -244,7 +252,10 @@ sub peek {
     my $sth = $self->{conn}->prepare("SELECT * FROM $self->{table} WHERE status = ? ORDER BY message_id LIMIT 1");
     $sth->execute(MESSAGE_STATUS_READY);
     my $value = $sth->fetchrow_hashref;
-    return $value ? bless($value, 'Politequeue::Message') : undef;
+    if ($value) {
+        return Politequeue::Message->new(%$value);
+    }
+    return undef;
 }
 
 sub get {
@@ -252,7 +263,10 @@ sub get {
     my $sth = $self->{conn}->prepare("SELECT * FROM $self->{table} WHERE message_id = ?");
     $sth->execute($message_id);
     my $value = $sth->fetchrow_hashref;
-    return $value ? bless($value, 'Politequeue::Message') : undef;
+    if ($value) {
+        return Politequeue::Message->new(%$value);
+    }
+    return undef;
 }
 
 sub done {
@@ -277,7 +291,7 @@ sub list_locked {
     $sth->execute(MESSAGE_STATUS_LOCKED, $time_value);
     my @results;
     while (my $row = $sth->fetchrow_hashref) {
-        push @results, bless($row, 'Politequeue::Message');
+        push @results, Politequeue::Message->new(%$row);
     }
     return \@results;
 }
@@ -288,7 +302,7 @@ sub list_failed {
     $sth->execute(MESSAGE_STATUS_FAILED);
     my @results;
     while (my $row = $sth->fetchrow_hashref) {
-        push @results, bless($row, 'Politequeue::Message');
+        push @results, Politequeue::Message->new(%$row);
     }
     return \@results;
 }
@@ -342,6 +356,10 @@ sub close {
 }
 
 package Politequeue::Message;
+
+use strict;
+use warnings;
+use Class::Tiny qw(data message_id status in_time lock_time done_time);
 
 use overload '""' => sub {
     my $self = shift;
