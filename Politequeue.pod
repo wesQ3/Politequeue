@@ -68,7 +68,7 @@ We can use the timing data that is automatically created during messages create/
         $done_time - $lock_time,
         $done_time - $in_time
     );
-    
+
     # Sample output:
     # Task 018d1234-5678-7abc-8def-123456789abc took 0.001 seconds to get done and was in the queue for 1.002 seconds
 

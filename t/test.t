@@ -1,7 +1,6 @@
 use strict;
 use warnings;
 use Test::More;
-use FindBin;
 use Politequeue;
 use Time::HiRes qw(sleep);
 use constant {
