@@ -58,9 +58,9 @@ We can use the timing data that is automatically created during messages create/
 
     # Retrieve timing data for the completed message
     my $done_msg = $q->get($message_id);
-    my $in_time    = $done_msg->{in_time};
-    my $lock_time  = $done_msg->{lock_time};
-    my $done_time  = $done_msg->{done_time} * 1e-9;
+    my $in_time   = $done_msg->{in_time} * 1e-9;
+    my $lock_time = $done_msg->{lock_time} * 1e-9;
+    my $done_time = $done_msg->{done_time} * 1e-9;
 
     print sprintf(
         "Task %s took %s seconds to get done and was in the queue for %s seconds\n",
@@ -68,13 +68,15 @@ We can use the timing data that is automatically created during messages create/
         $done_time - $lock_time,
         $done_time - $in_time
     );
-    # Task c9b9ef76e3a77cc66dd749d485613ec1 took 0 seconds to get done and was in the queue for 0 seconds
+    
+    # Sample output:
+    # Task 018d1234-5678-7abc-8def-123456789abc took 0.001 seconds to get done and was in the queue for 1.002 seconds
 
 =head2 C<maxsize> - Maximum queue size
 
 If you specify a C<maxsize> when you initialize the queue, it will create a trigger that will raise an error when that size is reached. In Perl, it will raise a DBI exception.
 
-    my $q = Politequeue->new(":memory:", maxsize => 50);
+    my $q = Politequeue->new(filename_or_conn => ":memory:", maxsize => 50);
 
     for my $i (0..49) {
         $q->put("data_$i");
@@ -134,8 +136,8 @@ B<Returns:> Politequeue object
 
 B<Example:>
 
-    my $q = Politequeue->new(":memory:");
-    my $q2 = Politequeue->new("queue.db", maxsize => 1000);
+    my $q = Politequeue->new(filename_or_conn => ":memory:");
+    my $q2 = Politequeue->new(filename_or_conn => "queue.db", maxsize => 1000);
 
 =head2 put
 

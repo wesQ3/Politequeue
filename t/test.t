@@ -175,4 +175,67 @@ subtest 'test_multiple_queues' => sub {
     is($q2->pop()->{data}, 'c', "Pop from q2");
 };
 
+subtest 'test_message_timing_data' => sub {
+    my $q = single_queue();
+    
+    # Put a message and record the time
+    my $before_put = time();
+    my $msg = $q->put("example task");
+    my $after_put = time();
+    
+    # Verify the message was created with timing data
+    ok(defined $msg->{in_time}, "Message has in_time");
+    ok(defined $msg->{message_id}, "Message has message_id");
+    is($msg->{status}, MESSAGE_STATUS_READY, "Message status is READY");
+    is($msg->{lock_time}, undef, "Message lock_time is initially undef");
+    is($msg->{done_time}, undef, "Message done_time is initially undef");
+    
+    # Simulate some processing time
+    sleep(0.1);
+    
+    # Pop the message from the queue and mark it as done
+    my $before_pop = time();
+    my $popped = $q->pop();
+    my $after_pop = time();
+    
+    is($popped->{data}, "example task", "Popped message has correct data");
+    is($popped->{message_id}, $msg->{message_id}, "Message IDs match");
+    is($popped->{status}, MESSAGE_STATUS_LOCKED, "Popped message is LOCKED");
+    ok(defined $popped->{lock_time}, "Popped message has lock_time");
+    
+    my $message_id = $popped->{message_id};
+    
+    # Mark as done
+    my $before_done = time();
+    $q->done($message_id);
+    my $after_done = time();
+    
+    # Retrieve timing data for the completed message
+    my $done_msg = $q->get($message_id);
+    is($done_msg->{status}, MESSAGE_STATUS_DONE, "Message status is DONE");
+
+    # Convert nanoseconds to seconds for timing calculations
+    my $in_time = $done_msg->{in_time} * 1e-9;
+    my $lock_time = $done_msg->{lock_time} * 1e-9;
+    my $done_time = $done_msg->{done_time} * 1e-9;
+    
+    # Verify timing sequence is logical
+    ok($lock_time >= $in_time, "lock_time >= in_time");
+    ok($done_time >= $lock_time, "done_time >= lock_time");
+    
+    # Verify times are within reasonable bounds (allowing for some clock variance)
+    ok($in_time >= $before_put - 1 && $in_time <= $after_put + 1, "in_time is within put timeframe");
+    ok($lock_time >= $before_pop - 1 && $lock_time <= $after_pop + 1, "lock_time is within pop timeframe");
+    ok($done_time >= $before_done - 1 && $done_time <= $after_done + 1, "done_time is within done timeframe");
+    
+    # Calculate durations like in the POD example
+    my $processing_time = $done_time - $lock_time;
+    my $queue_time = $done_time - $in_time;
+    
+    # Verify durations are non-negative and reasonable
+    ok($processing_time >= 0, "Processing time is non-negative");
+    ok($queue_time >= 0, "Queue time is non-negative");
+    ok($queue_time >= $processing_time, "Queue time >= processing time");
+};
+
 done_testing();
