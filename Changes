@@ -1,0 +1,4 @@
+Revision history for {{$dist->name}}
+
+{{$NEXT}}
+ * Initial port from litequeue 0.9 (f23754713)

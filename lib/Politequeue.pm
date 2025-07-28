@@ -1,7 +1,6 @@
 package Politequeue;
 
-use strict;
-use warnings;
+use strict; use warnings;
 use DBI;
 use Time::HiRes qw(time);
 use Class::Tiny qw(
@@ -19,7 +18,7 @@ use constant {
     MESSAGE_STATUS_FAILED => 3,
 };
 
-our $VERSION = '0.9';
+# ABSTRACT: Politequeue - A lightweight persistent queue using SQLite
 
 my ($_last_uuid7_time, $_last_uuid7_seq);
 

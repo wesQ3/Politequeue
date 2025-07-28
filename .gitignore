@@ -1,0 +1,9 @@
+Politequeue-*
+*.swp
+Makefile
+*.gz
+.build
+dbfile
+t/lib/*.sql
+*.un~
+.vscode/
