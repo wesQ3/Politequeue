@@ -10,6 +10,9 @@ use constant {
     MESSAGE_STATUS_FAILED => 3,
 };
 
+# NOTE: These tests are a port of the python litequeue tests suite. Keep these
+# in sync with the upstream tests to ensure compatibility.
+
 sub single_queue {
     my ($queue_name) = @_;
     my %args = (memory => 1);
