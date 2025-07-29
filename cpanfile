@@ -1,3 +1,4 @@
+requires 'Carp';
 requires 'DBI';
 requires 'DBD::SQLite';
 requires 'Class::Tiny';

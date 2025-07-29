@@ -1,6 +1,7 @@
 package Politequeue;
 
 use strict; use warnings;
+use Carp qw(croak confess);
 use DBI;
 use Time::HiRes qw(time);
 use Class::Tiny qw(
@@ -60,7 +61,7 @@ sub _uuid7 {
 sub _validate_table_name {
     my ($name) = @_;
     if ($name =~ /[]['`"]/) {
-        die "Invalid table name: $name";
+        croak "Invalid table name: $name";
     }
     return $name;
 }
@@ -74,10 +75,11 @@ sub BUILD {
     $self->{queue_name} = $args->{queue_name} || 'Queue';
     $self->{sqlite_cache_size_bytes} = $args->{sqlite_cache_size_bytes} || 256_000;
 
-    die "Either specify a filename_or_conn or pass memory=True"
+
+    croak "Either specify a filename_or_conn or pass memory=True"
         unless (defined $filename_or_conn && !$memory) || (!defined $filename_or_conn && $memory);
 
-    die "sqlite_cache_size_bytes must be > 0" unless $self->{sqlite_cache_size_bytes} > 0;
+    croak "sqlite_cache_size_bytes must be > 0" unless $self->{sqlite_cache_size_bytes} > 0;
     my $cache_n = -1 * int($self->{sqlite_cache_size_bytes} / 1024);
 
     my $dbh;
@@ -114,7 +116,7 @@ SQL
     };
     if ($@) {
         $self->{conn}->rollback;
-        die $@;
+        confess $@;
     }
 
     $self->{conn}->do("PRAGMA journal_mode = WAL;");
@@ -198,7 +200,7 @@ SQL
     };
     if ($@) {
         $self->{conn}->rollback;
-        die $@;
+        confess $@;
     }
     if ($message) {
         return Politequeue::Message->new(%$message);
