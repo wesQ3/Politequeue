@@ -66,30 +66,38 @@ sub _validate_table_name {
     return $name;
 }
 
+sub BUILDARGS {
+    my $class = shift;
+    if (@_ == 1 && !ref($_[0])) {
+        return { db => $_[0] };
+    } else {
+        return { @_ };
+    }
+}
+
 sub BUILD {
     my ($self, $args) = @_;
 
-    my $filename_or_conn = $args->{filename_or_conn};
+    my $db = $args->{db} || $args->{filename_or_conn};
     my $memory = $args->{memory};
     $self->{maxsize} = $args->{maxsize};
     $self->{queue_name} = $args->{queue_name} || 'Queue';
     $self->{sqlite_cache_size_bytes} = $args->{sqlite_cache_size_bytes} || 256_000;
 
-
-    croak "Either specify a filename_or_conn or pass memory=True"
-        unless (defined $filename_or_conn && !$memory) || (!defined $filename_or_conn && $memory);
+    croak "Either specify a db or pass memory=True"
+        unless (defined $db && !$memory) || (!defined $db && $memory);
 
     croak "sqlite_cache_size_bytes must be > 0" unless $self->{sqlite_cache_size_bytes} > 0;
     my $cache_n = -1 * int($self->{sqlite_cache_size_bytes} / 1024);
 
     my $dbh;
-    if ($memory || (defined $filename_or_conn && $filename_or_conn eq ':memory:')) {
+    if ($memory || (defined $db && $db eq ':memory:')) {
         $dbh = DBI->connect("dbi:SQLite:dbname=:memory:", "", "", { RaiseError => 1, AutoCommit => 1 });
-    } elsif (ref $filename_or_conn eq 'DBI::db') {
-        $dbh = $filename_or_conn;
+    } elsif (ref $db eq 'DBI::db') {
+        $dbh = $db;
         $dbh->{AutoCommit} = 1;
     } else {
-        $dbh = DBI->connect("dbi:SQLite:dbname=$filename_or_conn", "", "", { RaiseError => 1, AutoCommit => 1 });
+        $dbh = DBI->connect("dbi:SQLite:dbname=$db", "", "", { RaiseError => 1, AutoCommit => 1 });
     }
 
     $self->{conn} = $dbh;
