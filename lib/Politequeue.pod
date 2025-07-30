@@ -2,6 +2,27 @@
 
 Politequeue - A lightweight persistent queue using SQLite
 
+=head1 SYNOPSIS
+
+    use Politequeue;
+
+    my $q = Politequeue->new(db => ":memory:");
+
+    # Put a message in the queue
+    my $message = $q->put("example task");
+
+    # Pop a message from the queue
+    my $popped = $q->pop();
+    if ($popped) {
+        print "Processing: " . $popped->data;
+        # ... process message ...
+        $q->done($popped->message_id);
+    }
+
+    # Check queue size
+    my $size = $q->qsize();
+    print "Queue size: $size\n";
+
 =head1 DESCRIPTION
 
 Politequeue is a lightweight persistent queue using SQLite with an emphasis on simplicity and few dependencies. It has timing metrics for the messages and is easily extendable via SQL.
@@ -9,6 +30,8 @@ Politequeue is a lightweight persistent queue using SQLite with an emphasis on s
 Tasks/messages are always passed as strings, so you can use JSON data as messages. Messages are interpreted as tasks, so after you C<pop> a message, you need to mark it as done when you finish processing it.
 
 This is a port of polyrand's L<Litequeue|https://github.com/litements/litequeue> from Python to Perl. Included is a UUIDv7 port from L<Steve Simmmons' uuid7|https://github.com/stevesimmons/uuid7>.
+
+Much of this documentation and the core function is a direct port of litequeue from Python, to ensure compatibility and future updates.
 
 =head1 MESSAGES DATA STRUCTURE
 
@@ -76,7 +99,7 @@ We can use the timing data that is automatically created during messages create/
 
 If you specify a C<maxsize> when you initialize the queue, it will create a trigger that will raise an error when that size is reached. In Perl, it will raise a DBI exception.
 
-    my $q = Politequeue->new(filename_or_conn => ":memory:", maxsize => 50);
+    my $q = Politequeue->new(db => ":memory:", maxsize => 50);
 
     for my $i (0..49) {
         $q->put("data_$i");
@@ -96,7 +119,7 @@ An error is raised when the queue has reached its size limit.
         }
     };
 
-When we C<pop> and item we can add another one. Take into account that C<$q-E<gt>put()> will return the C<rowid> of the latest inserted message, it does B<not> represent the current queue size.
+When we C<pop> an item we can add another one. Take into account that C<$q-E<gt>put()> will return the C<rowid> of the latest inserted message, it does B<not> represent the current queue size.
 
     my $popped = $q->pop();
 
@@ -112,15 +135,21 @@ When we C<pop> and item we can add another one. Take into account that C<$q-E<gt
 
 =head2 new
 
-    my $q = Politequeue->new($filename_or_conn, %options);
+    my $q = Politequeue->new(db => $file_or_dbh, %options);
 
-Creates a new Politequeue object. With Class::Tiny, this calls BUILD internally.
+    my $q = Politequeue->new($file_path);
+
+    my $q = Politequeue->new(':memory:');
+
+Creates a new Politequeue object. Provide key-value pairs or pass a single argument to use as the database filename or existing DBI database handle.
 
 B<Arguments:>
 
 =over 4
 
-=item * C<filename_or_conn> - Database filename, ":memory:" for in-memory database, or existing DBI database handle
+=item * C<db> - Database filename, ":memory:" for in-memory database, or existing DBI database handle
+
+=item * C<filename_or_conn> - Alias for C<db> for consistency with the original Python API
 
 =item * C<memory> - Boolean, set to true to use in-memory database (alternative to ":memory:")
 
@@ -134,16 +163,11 @@ B<Arguments:>
 
 B<Returns:> Politequeue object
 
-B<Example:>
-
-    my $q = Politequeue->new(filename_or_conn => ":memory:");
-    my $q2 = Politequeue->new(filename_or_conn => "queue.db", maxsize => 1000);
-
 =head2 put
 
     my $message = $q->put($data);
 
-Inserts a new message into the queue.
+Inserts a new message into the queue. If the queue has C<maxsize> and the number of STATUS_READY rows exceeds C<maxsize> an exception will be thrown.
 
 B<Arguments:>
 
@@ -366,11 +390,11 @@ B<Example:>
 
     my $is_full = $q->full();
 
-Checks if the queue is full (only relevant if maxsize was set).
+Checks if the queue is full. Always returns false if no C<maxsize> is set.
 
 B<Arguments:> None
 
-B<Returns:> Boolean (1 if full, 0 if not full or no maxsize set)
+B<Returns:> Boolean (1 if full, 0 if not full or no C<maxsize> set)
 
 B<Example:>
 
